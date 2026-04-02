@@ -63,14 +63,11 @@
     }).addTo(map);
 
     // --- CONFIGURAÇÃO DO ÍCONE DO CARRO ---
-    // AJUSTAMOS O TAMANHO AQUI:
-    // iconSize: [largura em pixels, altura em pixels]
-    // iconAnchor: [centro horizontal, centro vertical] (metade do tamanho)
     const carIcon = L.icon({
         iconUrl: 'carro.png', 
-        iconSize: [116, 250],    // <--- NOVO TAMANHO (convertido de 3.07cm x 6.61cm)
-        iconAnchor: [58, 125],   // <--- PONTO DE ANCORAGEM CENTRALIZADO (metade do novo tamanho)
-        popupAnchor: [0, -125]  // Ponto onde aparece o balão de texto (relativo à ancoragem)
+        iconSize: [40, 80],    // Tamanho equilibrado para visualização
+        iconAnchor: [20, 40],  // Ponto central de ancoragem
+        popupAnchor: [0, -35]  
     });
 
     const markers = {};
