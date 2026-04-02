@@ -63,12 +63,14 @@
     }).addTo(map);
 
     // --- CONFIGURAÇÃO DO ÍCONE DO CARRO ---
-    // Note que usamos 'carro.png' pois ele está na mesma pasta no GitHub
+    // AJUSTAMOS O TAMANHO AQUI:
+    // iconSize: [largura em pixels, altura em pixels]
+    // iconAnchor: [centro horizontal, centro vertical] (metade do tamanho)
     const carIcon = L.icon({
         iconUrl: 'carro.png', 
-        iconSize: [40, 40],    
-        iconAnchor: [20, 20],  
-        popupAnchor: [0, -20]  
+        iconSize: [116, 250],    // <--- NOVO TAMANHO (convertido de 3.07cm x 6.61cm)
+        iconAnchor: [58, 125],   // <--- PONTO DE ANCORAGEM CENTRALIZADO (metade do novo tamanho)
+        popupAnchor: [0, -125]  // Ponto onde aparece o balão de texto (relativo à ancoragem)
     });
 
     const markers = {};
