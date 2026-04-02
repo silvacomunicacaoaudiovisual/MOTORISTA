@@ -3,117 +3,99 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Frota Real - Mapa Profissional</title>
-    
+    <title>Painel Real - Frota Macapá</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
-    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
-
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', sans-serif; background: #0b0e14; display: flex; height: 100vh; color: white; overflow: hidden; }
-        
-        /* Painel Lateral */
-        #frota-painel { width: 320px; background: #151921; padding: 20px; border-right: 1px solid #2d333b; overflow-y: auto; z-index: 1000; }
-        #frota-painel h2 { color: #FFC107; margin-bottom: 20px; font-size: 22px; text-transform: uppercase; letter-spacing: 1px; }
-        
-        .carro-item { 
-            background: #1c222d; padding: 15px; border-radius: 10px; margin-bottom: 12px; 
-            border: 1px solid #30363d; cursor: pointer; transition: 0.3s;
-        }
-        .carro-item:hover { border-color: #FFC107; background: #252d3a; }
-        .carro-item .nome { color: #FFC107; font-weight: bold; font-size: 16px; margin-bottom: 5px; }
-        .carro-item .speed { color: #00E676; font-size: 15px; font-weight: bold; }
-        .carro-item .status { font-size: 12px; color: #8b949e; margin-top: 5px; }
-        
-        /* Mapa */
-        #map { flex: 1; height: 100%; }
+        body { font-family: 'Segoe UI', sans-serif; display: flex; height: 100vh; background: #0b0e14; }
+        #sidebar { width: 320px; background: #151921; color: white; padding: 20px; z-index: 1000; border-right: 1px solid #2d333b; overflow-y: auto; }
+        #map { flex-grow: 1; }
+        .car-card { background: #1c222d; padding: 12px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #FFC107; font-size: 13px; cursor: pointer; }
+        .car-card strong { color: #FFC107; display: block; margin-bottom: 4px; }
+        .car-label { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #FFC107; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; border: 1px solid #FFC107; }
     </style>
 </head>
 <body>
-
-<div id="frota-painel">
-    <h2>Frota Real</h2>
-    <div id="lista-carros">
-        <p style="color: #8b949e; font-size: 14px;">Buscando motoristas ativos...</p>
+    <div id="sidebar">
+        <h2>Frota Real</h2>
+        <div id="lista-veiculos"></div>
     </div>
-</div>
+    <div id="map"></div>
 
-<div id="map"></div>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+// CONFIGURAÇÃO DO SEU FIREBASE
+const firebaseConfig = {
+    apiKey: "AIzaSyDnZlax22oynZEuyDmUP7d-UuLEwqVLXWQ",
+    authDomain: "rastreio-macapa.firebaseapp.com",
+    databaseURL: "https://rastreio-macapa-default-rtdb.firebaseio.com",
+    projectId: "rastreio-macapa",
+    appId: "1:897295698995:web:2375c2d4b95b2eda712746"
+};
 
-<script>
-    // --- CONFIGURAÇÃO DO FIREBASE ---
-    const firebaseConfig = {
-        apiKey: "AIzaSyDnZlax22oynZEuyDmUP7d-UuLEwqVLXWQ",
-        databaseURL: "https://rastreio-macapa-default-rtdb.firebaseio.com",
-        projectId: "rastreio-macapa",
-        appId: "1:897295698995:web:2375c2d4b95b2eda712746"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-    // --- CONFIGURAÇÃO DO MAPA ---
-    const map = L.map('map').setView([-0.0355, -51.0705], 14);
+// Inicializa o Mapa em Macapá
+const map = L.map('map').setView([0.0349, -51.0664], 14);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '© Frota Real Macapá'
-    }).addTo(map);
+// Objeto para guardar os marcadores dos motoristas que aparecerem
+const marcadoresAtivos = {};
 
-    // --- CONFIGURAÇÃO DO ÍCONE DO CARRO ---
-    const carIcon = L.icon({
-        iconUrl: 'carro.png', 
-        iconSize: [40, 80],    // Tamanho equilibrado para visualização
-        iconAnchor: [20, 40],  // Ponto central de ancoragem
-        popupAnchor: [0, -35]  
+function criarIconeDinamico(nome) {
+    return L.divIcon({
+        html: `
+        <div class="car-container" style="position: relative;">
+            <div class="car-label" style="position: absolute; top: -25px; left: 50%; transform: translateX(-50%); background: black; color: #FFC107; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; white-space: nowrap; border: 1px solid #FFC107;">${nome}</div>
+            <svg width="30" height="30" viewBox="0 0 220 220">
+                <rect x="18" y="10" width="84" height="190" rx="20" fill="#FFC107" stroke="#000" stroke-width="3"/>
+            </svg>
+        </div>`,
+        className: 'car-icon', iconSize: [30, 30], iconAnchor: [15, 15]
     });
+}
 
-    const markers = {};
+// ESCUTAR O FIREBASE EM TEMPO REAL
+db.ref('carros').on('value', (snapshot) => {
+    const todosCarros = snapshot.val();
+    if (!todosCarros) return;
 
-    // --- ATUALIZAÇÃO EM TEMPO REAL ---
-    db.ref('carros').on('value', snapshot => {
-        const data = snapshot.val();
-        const listaHTML = document.getElementById('lista-carros');
-        
-        if (data) {
-            listaHTML.innerHTML = ''; 
-            
-            for (const id in data) {
-                const carro = data[id];
-                const nome = carro.motorista;
-                const latlng = [carro.lat, carro.lng];
-                const velocidade = carro.speed || 0;
-                const hora = carro.ultimaAtualizacao || '';
+    const listaLateral = document.getElementById('lista-veiculos');
 
-                if (markers[id]) {
-                    markers[id].setLatLng(latlng).setPopupContent(`<b>${nome}</b><br>${velocidade} km/h`);
-                } else {
-                    markers[id] = L.marker(latlng, { icon: carIcon }).addTo(map)
-                        .bindPopup(`<b>${nome}</b><br>${velocidade} km/h`);
-                }
+    for (let id in todosCarros) {
+        const dados = todosCarros[id];
+        const pos = [dados.lat, dados.lng];
+        const nomeMotorista = dados.motorista || "Motorista";
 
-                const item = document.createElement('div');
-                item.className = 'carro-item';
-                item.innerHTML = `
-                    <div class="nome">${nome}</div>
-                    <div class="speed">${velocidade} km/h</div>
-                    <div class="status">Visto às: ${hora}</div>
-                `;
-                
-                item.onclick = () => {
-                    map.setView(latlng, 17);
-                    markers[id].openPopup();
-                };
-                
-                listaHTML.appendChild(item);
-            }
+        // Se o marcador ainda não existe para esse motorista, cria um novo
+        if (!marcadoresAtivos[id]) {
+            // Adiciona na lateral
+            const card = document.createElement('div');
+            card.className = 'car-card';
+            card.id = `card-${id}`;
+            card.innerHTML = `<strong>${nomeMotorista}</strong><span id="speed-${id}">${dados.speed} km/h</span>`;
+            card.onclick = () => map.setView(marcadoresAtivos[id].getLatLng(), 17);
+            listaLateral.appendChild(card);
+
+            // Adiciona no mapa
+            marcadoresAtivos[id] = L.marker(pos, { icon: criarIconeDinamico(nomeMotorista) }).addTo(map);
         } else {
-            listaHTML.innerHTML = '<p>Nenhum motorista online.</p>';
+            // Se já existe, apenas atualiza posição e velocidade
+            marcadoresAtivos[id].setLatLng(pos);
+            document.getElementById(`speed-${id}`).innerText = dados.speed + " km/h";
+            
+            // Atualiza a rotação (se o navegador enviar o heading)
+            const rotator = marcadoresAtivos[id]._icon.querySelector('svg');
+            if (rotator && dados.heading) rotator.style.transform = `rotate(${dados.heading}deg)`;
         }
-    });
-</script>
+    }
+});
 
+inicializarPainel();
+    </script>
 </body>
 </html>
