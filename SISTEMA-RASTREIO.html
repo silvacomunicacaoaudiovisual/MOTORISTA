@@ -29,8 +29,6 @@
         
         /* Mapa */
         #map { flex: 1; height: 100%; }
-
-        /* Removemos os estilos da .custom-icon (bola amarela) que existiam aqui */
     </style>
 </head>
 <body>
@@ -58,21 +56,19 @@
     const db = firebase.database();
 
     // --- CONFIGURAÇÃO DO MAPA ---
-    // Inicia centralizado em Macapá
     const map = L.map('map').setView([-0.0355, -51.0705], 14);
 
-    // Mapa Estilo Escuro (Dark Mode)
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         attribution: '© Frota Real Macapá'
     }).addTo(map);
 
     // --- CONFIGURAÇÃO DO ÍCONE DO CARRO ---
-    // Usando apenas a imagem do seu carro, sem círculos de fundo
+    // Note que usamos 'carro.png' pois ele está na mesma pasta no GitHub
     const carIcon = L.icon({
-        iconUrl: 'carro.png', // <--- COLOQUE O NOME DO SEU ARQUIVO DE IMAGEM AQUI
-        iconSize: [50, 50],    // Tamanho do ícone no mapa
-        iconAnchor: [25, 25],  // Centro da imagem
-        popupAnchor: [0, -20]  // Onde aparece o balão de texto
+        iconUrl: 'carro.png', 
+        iconSize: [40, 40],    
+        iconAnchor: [20, 20],  
+        popupAnchor: [0, -20]  
     });
 
     const markers = {};
@@ -83,7 +79,7 @@
         const listaHTML = document.getElementById('lista-carros');
         
         if (data) {
-            listaHTML.innerHTML = ''; // Limpa a lista para atualizar
+            listaHTML.innerHTML = ''; 
             
             for (const id in data) {
                 const carro = data[id];
@@ -92,7 +88,6 @@
                 const velocidade = carro.speed || 0;
                 const hora = carro.ultimaAtualizacao || '';
 
-                // 1. Atualizar ou Criar Marcador no Mapa
                 if (markers[id]) {
                     markers[id].setLatLng(latlng).setPopupContent(`<b>${nome}</b><br>${velocidade} km/h`);
                 } else {
@@ -100,7 +95,6 @@
                         .bindPopup(`<b>${nome}</b><br>${velocidade} km/h`);
                 }
 
-                // 2. Atualizar Lista Lateral
                 const item = document.createElement('div');
                 item.className = 'carro-item';
                 item.innerHTML = `
@@ -109,7 +103,6 @@
                     <div class="status">Visto às: ${hora}</div>
                 `;
                 
-                // Clique na lista foca o mapa no carro
                 item.onclick = () => {
                     map.setView(latlng, 17);
                     markers[id].openPopup();
