@@ -24,11 +24,8 @@
 
 <div class="container">
     <h2>MOTORISTA</h2>
-    
     <input type="text" id="nome-motorista" placeholder="DIGITE SEU NOME">
-
     <button id="btn-transmissao">INICIAR RASTREIO</button>
-    
     <div id="status">Status: <span>Offline</span></div>
 </div>
 
@@ -43,11 +40,24 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
     let watchId = null;
+    let wakeLock = null; // Variável da trava de tela
 
     const btn = document.getElementById('btn-transmissao');
     const statusTxt = document.querySelector('#status span');
 
-    btn.onclick = function() {
+    // Função para manter o sistema ativo (Wake Lock)
+    async function manterAtivo() {
+        if ('wakeLock' in navigator) {
+            try {
+                wakeLock = await navigator.wakeLock.request('screen');
+                console.log("Wake Lock ativo!");
+            } catch (err) {
+                console.log("Erro Wake Lock: " + err.message);
+            }
+        }
+    }
+
+    btn.onclick = async function() {
         const nome = document.getElementById('nome-motorista').value.trim().toUpperCase();
 
         if(!nome) { 
@@ -55,10 +65,12 @@
             return; 
         }
 
-        // Usamos o nome como ID no banco para não precisar de seleção
         const idLimpo = nome.replace(/\s+/g, '_'); 
 
         if(!watchId) {
+            // Ativa a trava de tela quando inicia
+            await manterAtivo();
+
             watchId = navigator.geolocation.watchPosition(pos => {
                 db.ref('carros/' + idLimpo).set({
                     motorista: nome,
@@ -75,10 +87,19 @@
                 btn.classList.add('active');
             }, (err) => {
                 alert("Erro: Ative o GPS do celular!");
-            }, { enableHighAccuracy: true });
+            }, { 
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: 10000 
+            });
         } else {
+            // Limpa o GPS e a trava de tela
             navigator.geolocation.clearWatch(watchId);
             watchId = null;
+            if (wakeLock !== null) {
+                wakeLock.release();
+                wakeLock = null;
+            }
             statusTxt.innerText = "Offline";
             statusTxt.className = "";
             btn.innerText = "INICIAR RASTREIO";
