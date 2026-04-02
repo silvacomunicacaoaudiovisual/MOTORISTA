@@ -12,8 +12,7 @@
         .container { background: #151921; padding: 30px; border-radius: 15px; border: 1px solid #2d333b; width: 100%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; }
         h2 { color: #FFC107; margin-bottom: 25px; font-size: 24px; }
         input { width: 100%; padding: 15px; margin-bottom: 20px; background: #1c222d; border: 1px solid #30363d; border-radius: 8px; color: white; font-size: 18px; outline: none; text-align: center; }
-        input:focus { border-color: #FFC107; }
-        button { width: 100%; padding: 18px; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.3s; background: #FFC107; color: #0b0e14; }
+        button { width: 100%; padding: 18px; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; background: #FFC107; color: #0b0e14; }
         button.active { background: #ff4444; color: white; }
         #status { margin-top: 20px; font-size: 14px; color: #8b949e; }
         .blink { animation: blinker 1.5s linear infinite; color: #00E676; font-weight: bold; }
@@ -21,7 +20,6 @@
     </style>
 </head>
 <body>
-
 <div class="container">
     <h2>MOTORISTA</h2>
     <input type="text" id="nome-motorista" placeholder="DIGITE SEU NOME">
@@ -36,77 +34,45 @@
         projectId: "rastreio-macapa",
         appId: "1:897295698995:web:2375c2d4b95b2eda712746"
     };
-    
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
     let watchId = null;
-    let wakeLock = null; // Variável da trava de tela
+    let wakeLock = null;
 
-    const btn = document.getElementById('btn-transmissao');
-    const statusTxt = document.querySelector('#status span');
-
-    // Função para manter o sistema ativo (Wake Lock)
     async function manterAtivo() {
         if ('wakeLock' in navigator) {
-            try {
-                wakeLock = await navigator.wakeLock.request('screen');
-                console.log("Wake Lock ativo!");
-            } catch (err) {
-                console.log("Erro Wake Lock: " + err.message);
-            }
+            try { wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
         }
     }
 
-    btn.onclick = async function() {
+    document.getElementById('btn-transmissao').onclick = async function() {
+        const btn = this;
         const nome = document.getElementById('nome-motorista').value.trim().toUpperCase();
-
-        if(!nome) { 
-            alert("Por favor, digite seu nome para começar!"); 
-            return; 
-        }
-
-        const idLimpo = nome.replace(/\s+/g, '_'); 
+        if(!nome) return alert("Digite seu nome!");
+        const idLimpo = nome.replace(/\s+/g, '_');
 
         if(!watchId) {
-            // Ativa a trava de tela quando inicia
             await manterAtivo();
-
             watchId = navigator.geolocation.watchPosition(pos => {
                 db.ref('carros/' + idLimpo).set({
                     motorista: nome,
                     lat: pos.coords.latitude,
                     lng: pos.coords.longitude,
                     speed: Math.round(pos.coords.speed * 3.6) || 0,
-                    heading: pos.coords.heading || 0,
                     ultimaAtualizacao: new Date().toLocaleTimeString()
                 });
-
-                statusTxt.innerText = "RASTREANDO...";
-                statusTxt.className = "blink";
+                document.querySelector('#status span').innerText = "RASTREANDO...";
+                document.querySelector('#status span').className = "blink";
                 btn.innerText = "PARAR";
                 btn.classList.add('active');
-            }, (err) => {
-                alert("Erro: Ative o GPS do celular!");
-            }, { 
-                enableHighAccuracy: true,
-                maximumAge: 0,
-                timeout: 10000 
-            });
+            }, (err) => alert("Ative o GPS!"), { enableHighAccuracy: true, maximumAge: 0 });
         } else {
-            // Limpa o GPS e a trava de tela
             navigator.geolocation.clearWatch(watchId);
             watchId = null;
-            if (wakeLock !== null) {
-                wakeLock.release();
-                wakeLock = null;
-            }
-            statusTxt.innerText = "Offline";
-            statusTxt.className = "";
-            btn.innerText = "INICIAR RASTREIO";
-            btn.classList.remove('active');
+            if(wakeLock) wakeLock.release();
+            location.reload();
         }
     };
 </script>
-
 </body>
 </html>
