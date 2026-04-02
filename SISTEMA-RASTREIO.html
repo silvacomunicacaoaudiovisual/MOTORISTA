@@ -3,99 +3,154 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel Real - Frota Macapá</title>
+    <title>Frota Real - Mapa</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
     <style>
+        /* Estilos básicos para ocupar a tela inteira */
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', sans-serif; display: flex; height: 100vh; background: #0b0e14; }
-        #sidebar { width: 320px; background: #151921; color: white; padding: 20px; z-index: 1000; border-right: 1px solid #2d333b; overflow-y: auto; }
-        #map { flex-grow: 1; }
-        .car-card { background: #1c222d; padding: 12px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #FFC107; font-size: 13px; cursor: pointer; }
-        .car-card strong { color: #FFC107; display: block; margin-bottom: 4px; }
-        .car-label { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #FFC107; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; border: 1px solid #FFC107; }
+        body { font-family: 'Segoe UI', sans-serif; background: #0b0e14; display: flex; height: 100vh; color: white; }
+        
+        /* Painel lateral da frota */
+        #frota-painel { width: 300px; background: #151921; padding: 20px; border-right: 1px solid #2d333b; overflow-y: auto; }
+        #frota-painel h2 { color: #FFC107; margin-bottom: 20px; font-size: 20px; }
+        .carro-item { background: #1c222d; padding: 15px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #30363d; cursor: pointer; }
+        .carro-item .nome { color: #FFC107; font-weight: bold; font-size: 16px; margin-bottom: 5px; }
+        .carro-item .status { font-size: 13px; color: #8b949e; }
+        .carro-item .speed { color: #00E676; font-size: 14px; font-weight: bold; }
+        
+        /* Contêiner do mapa */
+        #map { flex: 1; height: 100%; }
+        
+        /* Estilo para os ícones personalizados do carro */
+        .custom-icon {
+            background-color: #FFC107; /* Cor amarela para visibilidade */
+            border: 3px solid #0b0e14;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 40px; /* Alinha o texto (ou ícone) no centro */
+            font-size: 20px;
+            color: #0b0e14;
+            box-shadow: 0 0 10px rgba(255,193,7,0.7);
+        }
     </style>
 </head>
 <body>
-    <div id="sidebar">
-        <h2>Frota Real</h2>
-        <div id="lista-veiculos"></div>
+
+<div id="frota-painel">
+    <h2>Frota Real</h2>
+    <div id="lista-carros">
+        <p style="color: #8b949e; font-size: 13px;">Aguardando motoristas...</p>
     </div>
-    <div id="map"></div>
+</div>
 
-    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<div id="map"></div>
 
-    <script>
-// CONFIGURAÇÃO DO SEU FIREBASE
-const firebaseConfig = {
-    apiKey: "AIzaSyDnZlax22oynZEuyDmUP7d-UuLEwqVLXWQ",
-    authDomain: "rastreio-macapa.firebaseapp.com",
-    databaseURL: "https://rastreio-macapa-default-rtdb.firebaseio.com",
-    projectId: "rastreio-macapa",
-    appId: "1:897295698995:web:2375c2d4b95b2eda712746"
-};
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+<script>
+    // --- CONFIGURAÇÃO DO FIREBASE ---
+    // Substitua pelas suas credenciais se necessário (já estão as corretas pelas imagens anteriores)
+    const firebaseConfig = {
+        apiKey: "AIzaSyDnZlax22oynZEuyDmUP7d-UuLEwqVLXWQ",
+        databaseURL: "https://rastreio-macapa-default-rtdb.firebaseio.com",
+        projectId: "rastreio-macapa",
+        appId: "1:897295698995:web:2375c2d4b95b2eda712746"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
 
-// Inicializa o Mapa em Macapá
-const map = L.map('map').setView([0.0349, -51.0664], 14);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+    // --- CONFIGURAÇÃO DO MAPA ---
+    // Centraliza em Macapá, AP
+    const macapaCoords = [-0.0355, -51.0705]; 
+    const map = L.map('map').setView(macapaCoords, 14);
 
-// Objeto para guardar os marcadores dos motoristas que aparecerem
-const marcadoresAtivos = {};
+    // Camada de mapa (cartodb-dark) para visibilidade
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap contributors © CARTO'
+    }).addTo(map);
 
-function criarIconeDinamico(nome) {
-    return L.divIcon({
-        html: `
-        <div class="car-container" style="position: relative;">
-            <div class="car-label" style="position: absolute; top: -25px; left: 50%; transform: translateX(-50%); background: black; color: #FFC107; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; white-space: nowrap; border: 1px solid #FFC107;">${nome}</div>
-            <svg width="30" height="30" viewBox="0 0 220 220">
-                <rect x="18" y="10" width="84" height="190" rx="20" fill="#FFC107" stroke="#000" stroke-width="3"/>
-            </svg>
-        </div>`,
-        className: 'car-icon', iconSize: [30, 30], iconAnchor: [15, 15]
+    // --- GERENCIAMENTO DE ÍCONES E MARCADORES ---
+    // Cria o ícone personalizado visível
+    const customCarIcon = L.divIcon({
+        className: 'custom-icon',
+        html: '🚗', // Ícone unicode de carro
+        iconSize: [40, 40],
+        iconAnchor: [20, 20],
+        popupAnchor: [0, -20]
     });
-}
 
-// ESCUTAR O FIREBASE EM TEMPO REAL
-db.ref('carros').on('value', (snapshot) => {
-    const todosCarros = snapshot.val();
-    if (!todosCarros) return;
+    // Objeto para armazenar os marcadores de cada motorista (para atualizar sem recriar)
+    const markers = {};
 
-    const listaLateral = document.getElementById('lista-veiculos');
+    // Referência para o painel de lista de carros
+    const listaCarros = document.getElementById('lista-carros');
 
-    for (let id in todosCarros) {
-        const dados = todosCarros[id];
-        const pos = [dados.lat, dados.lng];
-        const nomeMotorista = dados.motorista || "Motorista";
-
-        // Se o marcador ainda não existe para esse motorista, cria um novo
-        if (!marcadoresAtivos[id]) {
-            // Adiciona na lateral
-            const card = document.createElement('div');
-            card.className = 'car-card';
-            card.id = `card-${id}`;
-            card.innerHTML = `<strong>${nomeMotorista}</strong><span id="speed-${id}">${dados.speed} km/h</span>`;
-            card.onclick = () => map.setView(marcadoresAtivos[id].getLatLng(), 17);
-            listaLateral.appendChild(card);
-
-            // Adiciona no mapa
-            marcadoresAtivos[id] = L.marker(pos, { icon: criarIconeDinamico(nomeMotorista) }).addTo(map);
-        } else {
-            // Se já existe, apenas atualiza posição e velocidade
-            marcadoresAtivos[id].setLatLng(pos);
-            document.getElementById(`speed-${id}`).innerText = dados.speed + " km/h";
+    // --- FUNÇÃO PARA ATUALIZAR O MAPA E A LISTA ---
+    // Escuta mudanças em tempo real no banco de dados
+    db.ref('carros').on('value', snapshot => {
+        const data = snapshot.val();
+        
+        // Se houver carros cadastrados...
+        if (data) {
+            // Limpa a mensagem inicial
+            listaCarros.innerHTML = '';
             
-            // Atualiza a rotação (se o navegador enviar o heading)
-            const rotator = marcadoresAtivos[id]._icon.querySelector('svg');
-            if (rotator && dados.heading) rotator.style.transform = `rotate(${dados.heading}deg)`;
-        }
-    }
-});
+            // Loop por cada motorista
+            for (const idLimpo in data) {
+                const carro = data[idLimpo];
+                const nome = carro.motorista || idLimpo;
+                const coords = [carro.lat, carro.lng];
+                const speed = carro.speed || 0;
+                const ultima = carro.ultimaAtualizacao || '--:--:--';
 
-inicializarPainel();
-    </script>
+                // --- ATUALIZA O MAPA ---
+                // Se já existe um marcador para este motorista, atualiza a posição
+                if (markers[idLimpo]) {
+                    markers[idLimpo].setLatLng(coords).setPopupContent(`
+                        <b style="color: #FFC107; font-size: 14px;">${nome}</b><br>
+                        Velocidade: <b style="color: #00E676;">${speed} km/h</b><br>
+                        Última: ${ultima}
+                    `);
+                } 
+                // Se não existe, cria um novo marcador
+                else {
+                    markers[idLimpo] = L.marker(coords, { icon: customCarIcon })
+                        .addTo(map)
+                        .bindPopup(`
+                            <b style="color: #FFC107; font-size: 14px;">${nome}</b><br>
+                            Velocidade: <b style="color: #00E676;">${speed} km/h</b><br>
+                            Última: ${ultima}
+                        `);
+                }
+
+                // --- ATUALIZA A LISTA LATERAL ---
+                // Cria o elemento HTML para o painel lateral
+                const item = document.createElement('div');
+                item.className = 'carro-item';
+                item.innerHTML = `
+                    <div class="nome">${nome}</div>
+                    <div class="speed">${speed} km/h</div>
+                    <div class="status">Última atualização: ${ultima}</div>
+                `;
+                
+                // Adiciona clique para centralizar o mapa no carro
+                item.onclick = () => {
+                    map.setView(coords, 16);
+                    markers[idLimpo].openPopup();
+                };
+                
+                listaCarros.appendChild(item);
+            }
+        } 
+        // Se não houver carros cadastrados...
+        else {
+            listaCarros.innerHTML = '<p style="color: #8b949e; font-size: 13px;">Aguardando motoristas...</p>';
+        }
+    });
+
+</script>
+
 </body>
 </html>
