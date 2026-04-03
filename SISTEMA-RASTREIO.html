@@ -6,26 +6,31 @@
     <title>Frota Real - Mapa Profissional</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
 
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', sans-serif; background: #0b0e14; display: flex; height: 100vh; color: white; overflow: hidden; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0b0e14; display: flex; height: 100vh; color: white; overflow: hidden; }
         
-        #frota-painel { width: 320px; background: #151921; padding: 20px; border-right: 1px solid #2d333b; overflow-y: auto; z-index: 1000; }
-        #frota-painel h2 { color: #FFC107; margin-bottom: 20px; font-size: 22px; text-transform: uppercase; letter-spacing: 1px; }
+        #frota-painel { width: 320px; background: #151921; padding: 20px; border-right: 1px solid #2d333b; overflow-y: auto; z-index: 1000; box-shadow: 5px 0 15px rgba(0,0,0,0.5); }
+        #frota-painel h2 { color: #FFC107; margin-bottom: 20px; font-size: 22px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #FFC107; padding-bottom: 10px; }
         
         .carro-item { 
             background: #1c222d; padding: 15px; border-radius: 10px; margin-bottom: 12px; 
-            border: 1px solid #30363d; cursor: pointer; transition: 0.3s;
+            border: 1px solid #30363d; cursor: pointer; transition: all 0.3s ease;
         }
-        .carro-item:hover { border-color: #FFC107; background: #252d3a; }
+        .carro-item:hover { border-color: #FFC107; background: #252d3a; transform: translateY(-2px); }
         .carro-item .nome { color: #FFC107; font-weight: bold; font-size: 16px; margin-bottom: 5px; }
         .carro-item .speed { color: #00E676; font-size: 15px; font-weight: bold; }
         .carro-item .status { font-size: 12px; color: #8b949e; margin-top: 5px; }
         
         #map { flex: 1; height: 100%; }
+        
+        /* Estilo do Popup do Mapa */
+        .leaflet-popup-content-wrapper { background: #151921; color: white; border: 1px solid #FFC107; }
+        .leaflet-popup-tip { background: #FFC107; }
     </style>
 </head>
 <body>
@@ -33,7 +38,7 @@
 <div id="frota-painel">
     <h2>Frota Real</h2>
     <div id="lista-carros">
-        <p style="color: #8b949e; font-size: 14px;">Buscando motoristas...</p>
+        <p style="color: #8b949e; font-size: 14px;">Buscando motoristas em Macapá...</p>
     </div>
 </div>
 
@@ -42,6 +47,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
+    // 1. Configuração do Firebase
     const firebaseConfig = {
         apiKey: "AIzaSyDnZlax22oynZEuyDmUP7d-UuLEwqVLXWQ",
         databaseURL: "https://rastreio-macapa-default-rtdb.firebaseio.com",
@@ -51,22 +57,25 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
+    // 2. Inicialização do Mapa (Focado em Macapá)
     const map = L.map('map').setView([-0.0355, -51.0705], 14);
 
+    // Camada de mapa escuro (Dark Mode)
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         attribution: '© Frota Real Macapá'
     }).addTo(map);
 
-    // --- TAMANHO CORRIGIDO AQUI ---
+    // Ícone personalizado do carro
     const carIcon = L.icon({
         iconUrl: 'carro.png', 
-        iconSize: [20, 40],    // Largura 30px, Altura 40px (Equilibrado)
-        iconAnchor: [20, 40],  // Ponto central de fixação
-        popupAnchor: [0, -35]  
+        iconSize: [35, 35],    
+        iconAnchor: [17, 17],  
+        popupAnchor: [0, -15]  
     });
 
     const markers = {};
 
+    // 3. Escuta em tempo real do Firebase
     db.ref('carros').on('value', snapshot => {
         const data = snapshot.val();
         const listaHTML = document.getElementById('lista-carros');
@@ -74,33 +83,56 @@
         if (data) {
             listaHTML.innerHTML = ''; 
             for (const id in data) {
-                const carro = data[id];
-                const nome = carro.motorista;
-                const latlng = [carro.lat, carro.lng];
-                const velocidade = carro.speed || 0;
-                const hora = carro.ultimaAtualizacao || '';
+                let carro = data[id];
 
-                if (markers[id]) {
-                    markers[id].setLatLng(latlng).setPopupContent(`<b>${nome}</b><br>${velocidade} km/h`);
-                } else {
-                    markers[id] = L.marker(latlng, { icon: carIcon }).addTo(map)
-                        .bindPopup(`<b>${nome}</b><br>${velocidade} km/h`);
+                // --- PONTE DE CONVERSÃO KODULAR (CRÍTICO) ---
+                // Se o dado vier como String (com aspas), transforma em Objeto JSON
+                if (typeof carro === 'string') {
+                    try {
+                        carro = JSON.parse(carro);
+                    } catch (e) {
+                        console.error("Erro ao processar dados de: " + id, e);
+                        continue; 
+                    }
                 }
 
-                const item = document.createElement('div');
-                item.className = 'carro-item';
-                item.innerHTML = `
-                    <div class="nome">${nome}</div>
-                    <div class="speed">${velocidade} km/h</div>
-                    <div class="status">Visto às: ${hora}</div>
-                `;
-                
-                item.onclick = () => {
-                    map.setView(latlng, 17);
-                    markers[id].openPopup();
-                };
-                listaHTML.appendChild(item);
+                const nome = carro.motorista || id;
+                const lat = parseFloat(carro.lat);
+                const lng = parseFloat(carro.lng);
+                const velocidade = Math.round(carro.speed || 0);
+                const latlng = [lat, lng];
+
+                // Verifica se as coordenadas são válidas antes de desenhar
+                if (!isNaN(lat) && !isNaN(lng)) {
+                    
+                    // Atualiza ou cria o marcador no mapa
+                    if (markers[id]) {
+                        markers[id].setLatLng(latlng)
+                                  .setPopupContent(`<b>${nome}</b><br>Velocidade: ${velocidade} km/h`);
+                    } else {
+                        markers[id] = L.marker(latlng, { icon: carIcon }).addTo(map)
+                            .bindPopup(`<b>${nome}</b><br>Velocidade: ${velocidade} km/h`);
+                    }
+
+                    // Adiciona o item na lista lateral
+                    const item = document.createElement('div');
+                    item.className = 'carro-item';
+                    item.innerHTML = `
+                        <div class="nome">${nome}</div>
+                        <div class="speed">${velocidade} km/h</div>
+                        <div class="status">Motorista Ativo</div>
+                    `;
+                    
+                    // Zoom ao clicar no nome do motorista
+                    item.onclick = () => {
+                        map.setView(latlng, 17);
+                        markers[id].openPopup();
+                    };
+                    listaHTML.appendChild(item);
+                }
             }
+        } else {
+            listaHTML.innerHTML = '<p style="color: #8b949e;">Nenhum motorista online.</p>';
         }
     });
 </script>
